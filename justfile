@@ -1,0 +1,3 @@
+# Run `go test` on all packages whenever a *.go file changes.
+test:
+    watchexec -e go go test ./...
