@@ -3,6 +3,7 @@ package pokeapi
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/madsbv/pokerepl/internal/pokecache"
 	"io"
 	"net/http"
 )
@@ -13,7 +14,7 @@ func locationURL(query string) string {
 	return fmt.Sprintf("%s%s", pokeapiLocationURL, query)
 }
 
-func GetLocations(q *string) (LocationList, error) {
+func GetLocations(q *string, cache pokecache.Cache) (LocationList, error) {
 	locations := LocationList{}
 
 	query := ""
@@ -23,18 +24,23 @@ func GetLocations(q *string) (LocationList, error) {
 	} else {
 		query = *q
 	}
-	resp, err := http.Get(query)
-	if err != nil {
-		return locations, err
+
+	body, exists := cache.Get(query)
+	if !exists {
+		resp, err := http.Get(query)
+		if err != nil {
+			return locations, err
+		}
+		defer resp.Body.Close()
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return locations, err
+		}
+		body = respBody
+		cache.Add(query, body)
 	}
 
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return locations, err
-	}
-
-	err = json.Unmarshal(body, &locations)
+	err := json.Unmarshal(body, &locations)
 	if err != nil {
 		return locations, err
 	}

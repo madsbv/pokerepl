@@ -4,13 +4,16 @@ import (
 	"bufio"
 	"fmt"
 	"github.com/madsbv/pokerepl/internal/pokeapi"
+	"github.com/madsbv/pokerepl/internal/pokecache"
 	"os"
+	"time"
 )
 
 func main() {
 	prompt := "pokedex > "
 	scanner := bufio.NewScanner(os.Stdin)
-	config := config{nil, nil, true}
+	cacheInterval := 5 * time.Second
+	config := config{nil, nil, true, pokecache.New(cacheInterval)}
 	for {
 		fmt.Print(prompt)
 		scanner.Scan()
@@ -20,6 +23,12 @@ func main() {
 			break
 		}
 	}
+}
+
+type command struct {
+	name        string
+	description string
+	callback    func(*config)
 }
 
 func commands(input string) command {
@@ -60,16 +69,11 @@ func commands(input string) command {
 	}
 }
 
-type command struct {
-	name        string
-	description string
-	callback    func(*config)
-}
-
 type config struct {
 	next    *string
 	prev    *string
 	running bool
+	cache   pokecache.Cache
 }
 
 func commandMap(c *config) {
@@ -81,7 +85,7 @@ func commandMapb(c *config) {
 }
 
 func mapLocationsPage(c *config, dest *string) {
-	p, err := pokeapi.GetLocations(dest)
+	p, err := pokeapi.GetLocations(dest, c.cache)
 	if err != nil {
 		fmt.Printf("Error: %s", err)
 		return
