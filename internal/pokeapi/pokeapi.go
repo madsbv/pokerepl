@@ -8,50 +8,56 @@ import (
 	"net/http"
 )
 
-var pokeapiLocationURL string = "https://pokeapi.co/api/v2/location-area/"
-
-func locationURL(query string) string {
-	return fmt.Sprintf("%s%s", pokeapiLocationURL, query)
+func GetLocationDetails(query string, cache pokecache.Cache) (PokeapiLocation, error) {
+	url := locationURL(query)
+	return getParsedResponse[PokeapiLocation](url, cache)
 }
 
 func GetLocations(q *string, cache pokecache.Cache) (LocationList, error) {
-	locations := LocationList{}
-
 	query := ""
-	// TODO: Do we want error handling instead of default behaviour here? I worry that default behaviour will break the expectation that prev and next are reversible, e.g., if we get to the end of the list and then `next` takes us back to the beginning.
 	if q == nil {
 		query = pokeapiLocationURL
 	} else {
 		query = *q
 	}
 
-	body, exists := cache.Get(query)
-	if !exists {
-		resp, err := http.Get(query)
-		if err != nil {
-			return locations, err
-		}
-		defer resp.Body.Close()
-		respBody, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return locations, err
-		}
-		body = respBody
-		cache.Add(query, body)
-	}
+	return getParsedResponse[LocationList](query, cache)
+}
 
-	err := json.Unmarshal(body, &locations)
+func getParsedResponse[T any](query string, cache pokecache.Cache) (T, error) {
+	t := *new(T)
+
+	body, err := getPokeapiJSONResponse(query, cache)
 	if err != nil {
-		return locations, err
+		return t, err
 	}
 
-	return locations, nil
+	err = json.Unmarshal(body, &t)
+	return t, err
+}
 
-	// locationNames := make([]string, 20)
-	// for _, location := range locations.Results {
-	// 	locationNames = append(locationNames, location.Name)
-	// }
-	// return locationNames, nil
+var pokeapiLocationURL string = "https://pokeapi.co/api/v2/location-area/"
+
+func locationURL(query string) string {
+	return fmt.Sprintf("%s%s", pokeapiLocationURL, query)
+}
+
+func getPokeapiJSONResponse(query string, cache pokecache.Cache) ([]byte, error) {
+	body, exists := cache.Get(query)
+	if exists {
+		return body, nil
+	}
+	resp, err := http.Get(query)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	cache.Add(query, respBody)
+	return respBody, nil
 }
 
 type LocationList struct {
@@ -64,8 +70,12 @@ type LocationList struct {
 	} `json:"results"`
 }
 
+type pokeapiResponse interface {
+	LocationList | PokeapiLocation
+}
+
 // Generated with https://mholt.github.io/json-to-go/ from the example at https://pokeapi.co/docs/v2#location-areas
-type pokeapiLocation struct {
+type PokeapiLocation struct {
 	ID                   int    `json:"id"`
 	Name                 string `json:"name"`
 	GameIndex            int    `json:"game_index"`

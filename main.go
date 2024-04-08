@@ -3,10 +3,12 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"os"
+	"strings"
+	"time"
+
 	"github.com/madsbv/pokerepl/internal/pokeapi"
 	"github.com/madsbv/pokerepl/internal/pokecache"
-	"os"
-	"time"
 )
 
 func main() {
@@ -18,7 +20,9 @@ func main() {
 		fmt.Print(prompt)
 		scanner.Scan()
 		input := scanner.Text()
-		commands(input).callback(&config)
+		args := strings.Split(input, " ")
+		cmd := args[0]
+		commands(cmd).callback(&config, args[1:])
 		if !config.running {
 			break
 		}
@@ -28,7 +32,7 @@ func main() {
 type command struct {
 	name        string
 	description string
-	callback    func(*config)
+	callback    func(*config, []string)
 }
 
 func commands(input string) command {
@@ -53,6 +57,11 @@ func commands(input string) command {
 			description: "Go back and display map",
 			callback:    commandMapb,
 		},
+		"explore": {
+			name:        "explore",
+			description: "Explore an area",
+			callback:    commandExplore,
+		},
 	}
 
 	// Command aliases
@@ -76,15 +85,24 @@ type config struct {
 	cache   pokecache.Cache
 }
 
-func commandMap(c *config) {
-	mapLocationsPage(c, c.next)
+func commandHelp(c *config, _ []string) {
+	fmt.Println("Help menu")
+	// TODO: Expand on this
 }
 
-func commandMapb(c *config) {
-	mapLocationsPage(c, c.prev)
+func commandExit(c *config, _ []string) {
+	c.running = false
 }
 
-func mapLocationsPage(c *config, dest *string) {
+func commandMap(c *config, _ []string) {
+	printLocationsPage(c, c.next)
+}
+
+func commandMapb(c *config, _ []string) {
+	printLocationsPage(c, c.prev)
+}
+
+func printLocationsPage(c *config, dest *string) {
 	p, err := pokeapi.GetLocations(dest, c.cache)
 	if err != nil {
 		fmt.Printf("Error: %s", err)
@@ -101,10 +119,22 @@ func mapLocationsPage(c *config, dest *string) {
 	}
 }
 
-func commandHelp(c *config) {
-	fmt.Println("Help menu")
-}
+func commandExplore(c *config, args []string) {
+	if len(args) == 0 {
+		fmt.Println("Enter the name of an area to explore it further!")
+		return
+	}
 
-func commandExit(c *config) {
-	c.running = false
+	name := args[0]
+
+	areaDetails, err := pokeapi.GetLocationDetails(name, c.cache)
+	if err != nil {
+		fmt.Printf("Something went wrong while exploring %v\n", name)
+	}
+
+	fmt.Printf("Exploring %v...\n", name)
+	fmt.Println("Found Pokemon:")
+	for _, encounter := range areaDetails.PokemonEncounters {
+		fmt.Printf(" - %v\n", encounter.Pokemon.Name)
+	}
 }
