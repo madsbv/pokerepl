@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"math/rand"
 	"os"
 	"strings"
 	"time"
@@ -14,8 +15,8 @@ import (
 func main() {
 	prompt := "pokedex > "
 	scanner := bufio.NewScanner(os.Stdin)
-	cacheInterval := 5 * time.Second
-	config := config{nil, nil, true, pokecache.New(cacheInterval)}
+	cacheInterval := 60 * 5 * time.Second
+	config := config{nil, nil, true, pokecache.New(cacheInterval), make(map[string]pokeapi.PokeapiPokemon)}
 	for {
 		fmt.Print(prompt)
 		scanner.Scan()
@@ -62,6 +63,21 @@ func commands(input string) command {
 			description: "Explore an area",
 			callback:    commandExplore,
 		},
+		"catch": {
+			name:        "catch",
+			description: "Attempt to catch a Pokemon!",
+			callback:    commandCatch,
+		},
+		"inspect": {
+			name:        "inspect",
+			description: "Inspect a Pokemon you have caught",
+			callback:    commandInspect,
+		},
+		"pokedex": {
+			name:        "pokedex",
+			description: "List the Pokemon you have caught",
+			callback:    commandPokedex,
+		},
 	}
 
 	// Command aliases
@@ -83,6 +99,7 @@ type config struct {
 	prev    *string
 	running bool
 	cache   pokecache.Cache
+	pokeman map[string]pokeapi.PokeapiPokemon
 }
 
 func commandHelp(c *config, _ []string) {
@@ -136,5 +153,61 @@ func commandExplore(c *config, args []string) {
 	fmt.Println("Found Pokemon:")
 	for _, encounter := range areaDetails.PokemonEncounters {
 		fmt.Printf(" - %v\n", encounter.Pokemon.Name)
+	}
+}
+
+func commandCatch(c *config, args []string) {
+	if len(args) == 0 {
+		fmt.Println("Enter the name of a Pokemon to try to catch it!")
+		return
+	}
+	pokemon, err := pokeapi.GetPokemonDetails(args[0], c.cache)
+	if err != nil {
+		fmt.Printf("Something went wrong while trying to catch %v.\n", args[0])
+		return
+	}
+
+	name, exp := pokemon.Name, pokemon.BaseExperience
+	// TODO: Mewtwo has base experience 340, change the rng?
+	if exp > 200 {
+		fmt.Printf("%v has base experience %v\n", name, exp)
+	}
+
+	roll := rand.Intn(201)
+	if roll >= exp {
+		fmt.Printf("You caught a %v!\n", name)
+		c.pokeman[name] = pokemon
+	} else {
+		fmt.Printf("%v got away!\n", name)
+	}
+}
+
+func commandInspect(c *config, args []string) {
+	if len(args) == 0 {
+		fmt.Println("Enter the name of a Pokemon to try to inspect")
+		return
+	}
+	name := args[0]
+	pokemon, exists := c.pokeman[name]
+	if !exists {
+		fmt.Printf("You have not caught a %v\n", name)
+	}
+	fmt.Printf("Name: %v\n", pokemon.Name)
+	fmt.Printf("Height: %v\n", pokemon.Height)
+	fmt.Printf("Weight: %v\n", pokemon.Weight)
+	fmt.Printf("Stats:\n")
+	for _, s := range pokemon.Stats {
+		fmt.Printf("  - %v: %v\n", s.Stat.Name, s.BaseStat)
+	}
+	fmt.Printf("Types:\n")
+	for _, t := range pokemon.Types {
+		fmt.Printf("  - %v\n", t.Type.Name)
+	}
+}
+
+func commandPokedex(c *config, args []string) {
+	fmt.Println("Your Pokedex:")
+	for k, _ := range c.pokeman {
+		fmt.Printf("  - %v\n", k)
 	}
 }
